@@ -1,0 +1,284 @@
+---
+title: 'Product Classification using Neural Network Algorithm'
+author: "Achmad Gunar Saadi"
+date: "October 3, 2018"
+output:
+  html_document:
+    toc: TRUE
+    toc_depth: 3
+    toc_float:
+      collapsed: FALSE
+    highlight:  pygments
+    theme: spacelab
+    number_sections: TRUE
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction {.tabset}
+## Objectives
+__Project: Product Classification using Neural Network Algorithm__<br />
+
+Present a R Markdown document to classify products in fashion industry by applying *neural network modelling*. In this case, I used neural network tool `mxnet`.<br />
+
+This dataset contains train and test set of _10 different categories for 28 x 28 pixel-sized fashion images_, use the following glossary for the target labels:<br />
+
+Special note for labelling, the reference as below: <br />
+0 = T-Shirt <br />
+1 = Trouser <br />
+2 = Pullover <br />
+3 = Dress <br />
+4 = Coat <br />
+5 = Sandal <br />
+6 = Shirt <br />
+7 = Sneaker <br />
+8 = Bag <br />
+9 = Boot <br />
+
+## Data Explanation
+
+The dataset is about product classification and contains 785 variables as following:<br />
+
+**label**: Unique udentifier for each record.(numeric)<br />
+**pixel**: Named from `pixel1` to `pixel784`. Integer value from 0 to 255 that correspond to the color. (numeric)<br />
+
+Special note for labelling, the reference as below: <br />
+0 = T-Shirt <br />
+1 = Trouser <br />
+2 = Pullover <br />
+3 = Dress <br />
+4 = Coat <br />
+5 = Sandal <br />
+6 = Shirt <br />
+7 = Sneaker <br />
+8 = Bag <br />
+9 = Boot <br />
+
+## Read and understand the Dataset
+
+We'll read the training and test set. Also set the mxnet library, since we will use the functions in this library. The training set contains 60000 observations. As for test set contains 10000 observations. Both have 785 columns which consists of one column label and the rest pixel columns. The pixel columns have value of 0 to 255. <br />
+
+```{r}
+library(mxnet)
+mnist_train <- read.csv("data_input/fashionmnist/train.csv")
+mnist_test <- read.csv("data_input/fashionmnist/test.csv")
+```
+
+```{r}
+dim(mnist_train)
+dim(mnist_test)
+```
+
+```{r}
+colnames(mnist_train)[c(1:6,780:785)]
+colnames(mnist_test)[c(1:6,780:785)]
+```
+
+```{r}
+range(mnist_train[, 2:ncol(mnist_train)])
+range(mnist_test[, 2:ncol(mnist_test)])
+```
+
+Regarding the label value in trainin set, all class evenly-distributed, which means from class category 0 to 9 the number is exactly same (each class has 6000 in total). <br />
+
+```{r}
+prop_class <- table(mnist_train$label)
+barplot(prop_class, main = "Distribution of Digits in Training Sample", col = colorRampPalette(colors = c("black","pink"))(10))
+```
+
+# Pre-processing
+## Dataset Formatting
+
+The pre-processing is the process which prepare the network configuration so that can be used to model the classification.<br />. We'll start from generate function to set and display the colored pixel training set and the label as an insight. The training set is set into matrix form and numeric type (the label excluded). Then reverse the matrix. <br />
+
+```{r}
+trainViz <- function(input) {
+    
+    dim.im <- sqrt(ncol(mnist_train[, -1]))
+    
+    dim.wi <- ceiling(sqrt(nrow(input)))
+    par(mfrow = c(dim.wi, dim.wi), mar = c(0.1, 0.1, 0.1, 0.1))
+    
+    for (i in 1:nrow(input)) {
+        mod1 <- matrix(input[i, 2:ncol(input)], nrow = dim.im, byrow = T)
+        mod1 <- apply(mod1, 2, as.numeric)
+        mod1 <- t(apply(mod1, 2, rev))
+        
+        image(1:dim.im, 1:dim.im, mod1, col = grey.colors(255), 
+            xaxt = "n", yaxt = "n")
+        text(2, 20, col = "white", cex = 1.2, mnist_train[i, 
+            1])
+    }
+    
+}
+```
+
+Here we are plotting the image in training set ... <br />
+Recall that the label glossary: <br />
+0 = T-Shirt <br />
+1 = Trouser <br />
+2 = Pullover <br />
+3 = Dress <br />
+4 = Coat <br />
+5 = Sandal <br />
+6 = Shirt <br />
+7 = Sneaker <br />
+8 = Bag <br />
+9 = Boot <br />
+
+```{r}
+trainViz(mnist_train[1:36, ])
+```
+
+## Generating Network COnfiguration
+
+This pre-processing step, we are gonna assemble a network configuration using functions provided in `mxnet` library. As for the architecture as following: <br />
+1) Rectified Linear Unit (ReLU) activation function with 128 hidden units. <br />
+2) Rectified Linear Unit (ReLU) activation function with 64 hidden units. <br />
+3) Softmax activation function with 10 hidden units. <br />
+
+The last function we used softmax function because it is provide good result with *multi-class* neural network case. Whereas we decided for 10 hidden units since in our case there are 10 classes of product.<br /> 
+The visualization of the generating of network configuration is visualized using graph.viz() function. <br />
+
+```{r}
+mod1.data <- mx.symbol.Variable("data")
+
+mod1.fc1 <- mx.symbol.FullyConnected(mod1.data, name = "fc1", 
+    num_hidden = 128)
+mod1.act1 <- mx.symbol.Activation(mod1.fc1, name = "activation1", 
+    act_type = "relu")
+
+mod1.fc2 <- mx.symbol.FullyConnected(mod1.act1, name = "fc2", 
+    num_hidden = 64)
+mod1.act2 <- mx.symbol.Activation(mod1.fc2, name = "activation2", 
+    act_type = "relu")
+
+mod1.fc3 <- mx.symbol.FullyConnected(mod1.act2, name = "fc3", 
+    num_hidden = 10)
+mod1.softmax <- mx.symbol.SoftmaxOutput(mod1.fc3, name = "softMax")
+```
+
+```{r}
+graph.viz(mod1.softmax)
+```
+
+## More Deeper in Pre-processing
+
+Set the training and test set into matrix form, then separate between the label and predictors columns. Subsequently, transpose and scaling the predictor both of them. After those step, now both of the dataset have 784 columns remaining. <br />
+
+```{r}
+train <- data.matrix(mnist_train)
+test <- data.matrix(mnist_test)
+```
+
+```{r}
+train_x <- train[, -1]
+train_y <- train[, 1]
+test_x <- test[, -1]
+```
+10) TRANSPOSE AND SCALING SO THAT THE VALUE RANGE 0-1
+```{r}
+train_x <- t(train_x/255)
+test_x <- t(test_x/255)
+```
+
+```{r}
+dim(train_x)
+dim(test_x)
+```
+
+Generating the mxnet feedforward neural network. We'll pass the network configuration previously. During the process, we also check the time needed to process this step just to provide good-to-know information. We defined the number of iterations over training data to train the model to 45. We specified _accuracy_ as our metric because as above mentioned the proportion of all classes is evenly-distributed. <br />
+
+```{r}
+log <- mx.metric.logger$new()
+startime <- proc.time() 
+mx.set.seed(0)
+
+mod1 <- mx.model.FeedForward.create(mod1.softmax, 
+                                     X = train_x,
+                                     y = train_y,
+                                     ctx = mx.cpu(),
+                                     num.round = 45,
+                                     array.batch.size = 80,
+                                     momentum = 0.95,
+                                     array.layout="colmajor",
+                                     learning.rate = 0.001,
+                                     eval.metric = mx.metric.accuracy,
+                                     epoch.end.callback = mx.callback.log.train.metric(1,log)
+)
+print(paste("Training took:", round((proc.time() - startime)[3],2),"seconds"))
+```
+
+```{r}
+plot(log$train, type = "l", xlab = "Iteration", ylab = "Accuracy")
+```
+
+# Processing
+14) Making prediction --> predict(model, test set, array.layout)
+
+The processings steps related to testing our test set. The testing is using predict() and specify the array layout in the colmajor format , since our data form in (c(features, examples)).<br />
+The predict() function will return values which each value corresponding to the probability of an obervation being in a particular class (0 to 9). Since the prediction return class in 1 to 10 while our label value 0 to 9, we need to substracted the prediction values by 1 (-1).<br />
+By max.col() function, the maximum probability of an observation being in a particular class can be specify (based on the largest probability). <br />
+
+```{r}
+mod1_preds <- predict(mod1, test_x, array.layout = " colmajor")
+t(round(mod1_preds[, 1:5], 2))
+```
+
+```{r}
+mod1_preds_result <- max.col(t(mod1_preds)) - 1
+mod1_preds_result[1:10]
+```
+
+Here, we generate the plot function and using it to display our first 36 data. <br />
+
+```{r}
+test_x.t<-t(test_x)
+plotResults <- function(images, preds) {
+    
+    x <- ceiling(sqrt(length(images)))
+    par(mfrow = c(x, x), mar = c(0.1, 0.1, 0.1, 0.1))
+    
+    for (i in images) {
+        m <- matrix(test_x.t[i, ], nrow = sqrt(ncol(test_x.t)), byrow = TRUE)
+        m <- apply(m, 2, rev)
+        image(t(m), col = grey.colors(255), axes = FALSE)
+        text(0.05, 0.1, col = "yellow", cex = 1.2, preds[i])
+    }
+    
+}
+```
+
+```{r}
+plotResults(1:36, mod1_preds_result)
+```
+
+Recall once again, that the label glossary: <br />
+0 = T-Shirt <br />
+1 = Trouser <br />
+2 = Pullover <br />
+3 = Dress <br />
+4 = Coat <br />
+5 = Sandal <br />
+6 = Shirt <br />
+7 = Sneaker <br />
+8 = Bag <br />
+9 = Boot <br />
+
+It looks like in our first 36 data, there is no mis-classify in this case. But how about all observations?. <br />
+We are gonna check our prediction result with the label in test set.
+
+```{r}
+length(mod1_preds_result)
+length(mnist_test[,1])
+fit<-sum(mod1_preds_result==mnist_test[,1])
+fit
+acc<-fit/length(mnist_test[,1])*100
+acc
+```
+
+> Of 10000 observations, our prediction match with the label in test set (first column) by 8790. That means the accuracy is 87.9%.
